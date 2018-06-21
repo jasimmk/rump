@@ -77,7 +77,11 @@ func get(conn redis.Conn, queue chan<- map[string]*DataDump) {
 func put(conn redis.Conn, queue <-chan map[string]*DataDump) {
 	for batch := range queue {
 		for key, dump := range batch {
-			conn.Send("RESTORE", key, dump.Ttl, dump.Value)
+			ttl := dump.Ttl
+			if ttl <= 0 {
+				ttl = 0
+			}
+			conn.Send("RESTORE", key, ttl, dump.Value)
 		}
 		_, err := conn.Do("")
 		handle(err)
@@ -86,14 +90,10 @@ func put(conn redis.Conn, queue <-chan map[string]*DataDump) {
 	}
 }
 
-func main() {
-	from := flag.String("from", "", "example: redis://127.0.0.1:6379/0")
-	to := flag.String("to", "", "example: redis://127.0.0.1:6379/1")
-	flag.Parse()
-
-	source, err := redis.DialURL(*from)
+func Sync(from string, to string) {
+	source, err := redis.DialURL(from)
 	handle(err)
-	destination, err := redis.DialURL(*to)
+	destination, err := redis.DialURL(to)
 	handle(err)
 	defer source.Close()
 	defer destination.Close()
@@ -108,4 +108,12 @@ func main() {
 	put(destination, queue)
 
 	fmt.Println("Sync done.")
+}
+
+func main() {
+	from := flag.String("from", "", "example: redis://127.0.0.1:6379/0")
+	to := flag.String("to", "", "example: redis://127.0.0.1:6379/1")
+	flag.Parse()
+	Sync(*from, *to)
+
 }
